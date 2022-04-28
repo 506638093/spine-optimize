@@ -1,5 +1,6 @@
 # spine-optimize
-Spint for Unity Version 2.1
+Spine for Unity Version 2.1
+
 First：
 Convert JSON to binary.
 
