@@ -134,7 +134,7 @@ namespace Spine {
 
 		private float[] curves; // type, x, y, ...
 
-#if OPTIMIZE_SPINE
+#if UNITY_EDITOR
 		//HuaHua
 		private float[] BezierCurves;
 #endif
@@ -144,7 +144,7 @@ namespace Spine {
 		public CurveTimeline (int frameCount) {
 			curves = new float[(frameCount - 1) * BEZIER_SIZE];
 
-#if OPTIMIZE_SPINE
+#if UNITY_EDITOR
 			//HuaHua
 			BezierCurves = new float[frameCount * 4];
 #endif
@@ -160,7 +160,7 @@ namespace Spine {
 			curves[frameIndex * BEZIER_SIZE] = STEPPED;
 		}
 
-#if OPTIMIZE_SPINE
+#if UNITY_EDITOR
 		//HuaHua
 		public byte GetFrameMode(int frameIndex)
         {
@@ -181,7 +181,7 @@ namespace Spine {
 		/// the difference between the keyframe's values.</summary>
 		public void SetCurve (int frameIndex, float cx1, float cy1, float cx2, float cy2) {
 
-#if OPTIMIZE_SPINE
+#if UNITY_EDITOR
 			//HuaHua
 			BezierCurves[frameIndex * 4] = cx1;
 			BezierCurves[frameIndex * 4 + 1] = cy1;
@@ -550,7 +550,7 @@ namespace Spine {
 		public DrawOrderTimeline (int frameCount) {
 			frames = new float[frameCount];
 			drawOrders = new int[frameCount][];
-#if OPTIMIZE_SPINE
+#if UNITY_EDITOR
 			//HuaHua
 			OffsetVertices = new (int, int)[frameCount][];
 #endif
@@ -563,7 +563,7 @@ namespace Spine {
 			drawOrders[frameIndex] = drawOrder;
 		}
 
-#if OPTIMIZE_SPINE
+#if UNITY_EDITOR
 		//HuaHua
 		public (int, int)[][] OffsetVertices;
 		public void SetOffsets(int frameIndex, (int, int)[] offsetVertices)
@@ -611,7 +611,7 @@ namespace Spine {
 			frames = new float[frameCount];
 			frameVertices = new float[frameCount][];
 
-#if OPTIMIZE_SPINE
+#if UNITY_EDITOR
 			//HuaHua
 			End = new int[frameCount];
 			Start = new int[frameCount];
@@ -625,7 +625,7 @@ namespace Spine {
 			frameVertices[frameIndex] = vertices;
 		}
 
-#if OPTIMIZE_SPINE
+#if UNITY_EDITOR
 		//HuaHua
 		public int[] End;
 		public int[] Start;

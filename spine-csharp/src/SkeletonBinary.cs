@@ -97,7 +97,35 @@ namespace Spine {
 #if OPTIMIZE_SPINE_READ
 
         public List<string> CacheStrings;
+        public List<float[]> CacheOffsetVertices;
         public bool IsOptimizedMode = false;
+
+        private int FindOffsetVerticeIndex(float[] offsetVertices)
+        {
+            for (int iOIdx = 0; iOIdx < CacheOffsetVertices.Count; ++iOIdx)
+            {
+                var verts = CacheOffsetVertices[iOIdx];
+                if (offsetVertices.Length != verts.Length)
+                {
+                    continue;
+                }
+
+                int ivert = 0;
+                for (ivert = 0; ivert < offsetVertices.Length; ++ivert)
+                {
+                    if (offsetVertices[ivert] != verts[ivert])
+                    {
+                        break;
+                    }
+                }
+                if (ivert == offsetVertices.Length)
+                {
+                    return iOIdx;
+                }
+            }
+
+            return -1;
+        }
 
         public SkeletonData ReadSkeletonData(Stream input)
         {
@@ -134,6 +162,7 @@ namespace Spine {
             //Cache Mode
             if (IsOptimizedMode)
             {
+                //read strings
                 var count = ReadInt(binBuffer, ref binPosition, true);
                 if (CacheStrings == null)
                 {
@@ -147,7 +176,31 @@ namespace Spine {
 
                 for (int i = 0; i < count; ++i)
                 {
-                    CacheStrings.Add( ReadString(binBuffer, ref binPosition, false) );
+                    CacheStrings.Add(ReadString(binBuffer, ref binPosition, false));
+                }
+
+                //read offset verts
+                var vertCount = ReadInt(binBuffer, ref binPosition, true);
+                if (CacheOffsetVertices == null)
+                {
+                    CacheOffsetVertices = new List<float[]>(vertCount);
+                }
+                else
+                {
+                    CacheOffsetVertices.Clear();
+                    CacheOffsetVertices.Capacity = vertCount;
+                }
+
+                for (int i = 0; i < vertCount; ++i)
+                {
+                    var vc = ReadInt(binBuffer, ref binPosition, true);
+                    var verts = new float[vc];
+                    for (int vi = 0; vi < vc; ++vi)
+                    {
+                        verts[vi] = ReadFloat(binBuffer, ref binPosition);
+                    }
+
+                    CacheOffsetVertices.Add(verts);
                 }
             }
 
@@ -647,24 +700,60 @@ namespace Spine {
                             else
                             {
                                 vertices = new float[vertexCount];
+
                                 int start = ReadInt(binBuffer, ref binPosition, true);
                                 end += start;
-                                if (scale == 1)
+                                float[] offsetVertices;
+                                int idx = 0;
+
+                                if (IsOptimizedMode)
                                 {
+                                    var offVertIdx = ReadInt(binBuffer, ref binPosition, true);
+                                    offsetVertices = CacheOffsetVertices[offVertIdx];
+
                                     for (int v = start; v < end; v++)
-                                        vertices[v] = ReadFloat(binBuffer, ref binPosition);
+                                    {
+                                        vertices[v] = offsetVertices[idx++] * scale;
+                                    }
                                 }
                                 else
                                 {
+#if UNITY_EDITOR
+                                    int offsetCount = end - start;
+                                    offsetVertices = new float[offsetCount];
                                     for (int v = start; v < end; v++)
+                                    {
+                                        var vert = ReadFloat(binBuffer, ref binPosition);
+                                        vertices[v] = vert * scale;
+                                        offsetVertices[idx++] = vert;
+                                    }
+#else
+                                    for (int v = start; v < end; v++)
+                                    {
                                         vertices[v] = ReadFloat(binBuffer, ref binPosition) * scale;
+                                    }
+#endif
                                 }
+
                                 if (attachment is MeshAttachment)
                                 {
                                     float[] meshVertices = ((MeshAttachment)attachment).vertices;
                                     for (int v = 0, vn = vertices.Length; v < vn; v++)
                                         vertices[v] += meshVertices[v];
                                 }
+#if UNITY_EDITOR
+                                //HuaHua
+                                if (!IsOptimizedMode && CacheOffsetVertices != null)
+                                {
+                                    int iOffsetIndex = FindOffsetVerticeIndex(offsetVertices);
+                                    if (iOffsetIndex == -1)
+                                    {
+                                        CacheOffsetVertices.Add(offsetVertices);
+                                    }
+                                }
+
+                                timeline.SetOffVertices(frameIndex, end - start, start, offsetVertices);
+#endif
                             }
 
                             timeline.SetFrame(frameIndex, time, vertices);
@@ -693,6 +782,12 @@ namespace Spine {
                         drawOrder[ii] = -1;
                     int[] unchanged = new int[slotCount - offsetCount];
                     int originalIndex = 0, unchangedIndex = 0;
+#if UNITY_EDITOR
+                    //HuaHua
+                    (int, int)[] offsetVertices = new (int, int)[offsetCount];
+                    int idx = 0;
+#endif
+
                     for (int ii = 0; ii < offsetCount; ii++)
                     {
                         int slotIndex = ReadInt(binBuffer, ref binPosition, true);
@@ -700,7 +795,12 @@ namespace Spine {
                         while (originalIndex != slotIndex)
                             unchanged[unchangedIndex++] = originalIndex++;
                         // Set changed items.
-                        drawOrder[originalIndex + ReadInt(binBuffer, ref binPosition, true)] = originalIndex++;
+                        int offset = ReadInt(binBuffer, ref binPosition, true);
+                        drawOrder[originalIndex + offset] = originalIndex++;
+
+#if UNITY_EDITOR
+                        offsetVertices[idx++] = (slotIndex, offset);
+#endif
                     }
                     // Collect remaining unchanged items.
                     while (originalIndex < slotCount)
@@ -709,6 +809,11 @@ namespace Spine {
                     for (int ii = slotCount - 1; ii >= 0; ii--)
                         if (drawOrder[ii] == -1) drawOrder[ii] = unchanged[--unchangedIndex];
                     timeline.SetFrame(i, ReadFloat(binBuffer, ref binPosition), drawOrder);
+
+#if UNITY_EDITOR
+                    //HuaHua
+                    timeline.SetOffsets(i, offsetVertices);
+#endif
                 }
                 timelines.Add(timeline);
                 duration = Math.Max(duration, timeline.frames[drawOrderCount - 1]);
@@ -849,8 +954,8 @@ namespace Spine {
             }
             var ret = new String(chars, 0, charCount);
 
-#if OPTIMIZE_SPINE
-            if (cacheString && CacheStrings != null)
+#if UNITY_EDITOR
+            if (!UnityEngine.Application.isPlaying && cacheString && CacheStrings != null)
             {
                 if(!CacheStrings.Contains(ret))
                 {
@@ -1542,7 +1647,7 @@ namespace Spine {
 		}
 #endif //OPTIMIZE_SPINE_READ
 
-#if OPTIMIZE_SPINE
+#if UNITY_EDITOR
         //HuaHua
         private void WriteString(Stream output, string value, bool saveIndex = true)
         {
@@ -2342,24 +2447,84 @@ namespace Spine {
 						WriteString(output, attachmentName);
 
 						var frames = timeline.Frames;
-						var vertices = timeline.Vertices;
-						WriteInt(output, timeline.FrameCount, true);
-						for (int frameIndex = 0; frameIndex < timeline.FrameCount; frameIndex++)
-						{
-							WriteFloat(output, frames[frameIndex]);
-							WriteInt(output, timeline.End[frameIndex], true);
-							if (timeline.End[frameIndex] > 0)
+                        var frameCount = timeline.FrameCount;
+
+                        if (IsOptimizedMode && frameCount > 3)
+                        {
+                            List<int> saveFrames = new List<int>() { 0 };
+                            for (int frameIndex = 1; frameIndex < frameCount - 2; frameIndex++)
                             {
-								WriteInt(output, timeline.Start[frameIndex], true);
-								for(int vi = 0; vi < timeline.OffsetVertices[frameIndex].Length; ++vi)
+                                if (timeline.End[frameIndex] > 0)
                                 {
-									WriteFloat(output, timeline.OffsetVertices[frameIndex][vi]);
+                                    saveFrames.Add(frameIndex);
+                                }
+                                else if (!IsSameCurve(timeline, frameIndex - 1, frameIndex)
+                                        || !IsSameCurve(timeline, frameIndex, frameIndex + 1))
+                                {
+                                    saveFrames.Add(frameIndex);
                                 }
                             }
 
-                            if (frameIndex < timeline.FrameCount - 1)
+                            saveFrames.Add(frameCount - 2);
+                            saveFrames.Add(frameCount - 1);
+
+                            WriteInt(output, saveFrames.Count, true);
+                            foreach(var frameIndex in saveFrames)
                             {
-                                WriteCurve(output, frameIndex, timeline);
+                                WriteFloat(output, frames[frameIndex]);
+                                WriteInt(output, timeline.End[frameIndex], true);
+                                if (timeline.End[frameIndex] > 0)
+                                {
+                                    WriteInt(output, timeline.Start[frameIndex], true);
+
+                                    if (CacheOffsetVertices != null)
+                                    {
+                                        int iOffsetIndex = FindOffsetVerticeIndex(timeline.OffsetVertices[frameIndex]);
+                                        WriteInt(output, iOffsetIndex, true);
+                                    }
+                                    else
+                                    {
+                                        for (int vi = 0; vi < timeline.OffsetVertices[frameIndex].Length; ++vi)
+                                        {
+                                            WriteFloat(output, timeline.OffsetVertices[frameIndex][vi]);
+                                        }
+                                    }
+                                }
+
+                                if (frameIndex < frameCount - 1)
+                                {
+                                    WriteCurve(output, frameIndex, timeline);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            WriteInt(output, frameCount, true);
+                            for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
+                            {
+                                WriteFloat(output, frames[frameIndex]);
+                                WriteInt(output, timeline.End[frameIndex], true);
+                                if (timeline.End[frameIndex] > 0)
+                                {
+                                    WriteInt(output, timeline.Start[frameIndex], true);
+                                    if (CacheOffsetVertices != null)
+                                    {
+                                        int iOffsetIndex = FindOffsetVerticeIndex(timeline.OffsetVertices[frameIndex]);
+                                        WriteInt(output, iOffsetIndex, true);
+                                    }
+                                    else
+                                    {
+                                        for (int vi = 0; vi < timeline.OffsetVertices[frameIndex].Length; ++vi)
+                                        {
+                                            WriteFloat(output, timeline.OffsetVertices[frameIndex][vi]);
+                                        }
+                                    }
+                                }
+
+                                if (frameIndex < frameCount - 1)
+                                {
+                                    WriteCurve(output, frameIndex, timeline);
+                                }
                             }
                         }
                     }
@@ -2440,10 +2605,22 @@ namespace Spine {
             // Write Cache Strings
             if (IsOptimizedMode)
             {
+                //write strings
                 WriteInt(output, CacheStrings.Count, true);
                 foreach (var str in CacheStrings)
                 {
                     WriteString(output, str, false);
+                }
+
+                //write verts
+                WriteInt(output, CacheOffsetVertices.Count, true);
+                foreach(var verts in CacheOffsetVertices)
+                {
+                    WriteInt(output, verts.Length, true);
+                    foreach(var vert in verts)
+                    {
+                        WriteFloat(output, vert);
+                    }
                 }
             }
 
@@ -2625,6 +2802,6 @@ namespace Spine {
 
 			}
 		}
-#endif //OPTIMIZE_SPINE
+#endif //UNITY_EDITOR
 	}
 }

@@ -555,7 +555,7 @@ namespace Spine {
 										for (int i = 0; i < vertexCount; i++)
 											vertices[i] += meshVertices[i];
 									}
-#if OPTIMIZE_SPINE
+#if UNITY_EDITOR
 									//HuaHua
 									float[] offsetVertices = new float[verticesValue.Count];
 									for(int i = 0; i < verticesValue.Count; ++i)
@@ -608,7 +608,7 @@ namespace Spine {
 						for (int i = slotCount - 1; i >= 0; i--)
 							if (drawOrder[i] == -1) drawOrder[i] = unchanged[--unchangedIndex];
 
-#if OPTIMIZE_SPINE
+#if UNITY_EDITOR
                         //HuaHua
                         (int,int)[] offsetVertices = new (int, int)[offsets.Count];
 						int idx = 0;

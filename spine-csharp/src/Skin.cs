@@ -38,7 +38,7 @@ namespace Spine {
 		private Dictionary<KeyValuePair<int, String>, Attachment> attachments =
 			new Dictionary<KeyValuePair<int, String>, Attachment>(AttachmentComparer.Instance);
 
-#if OPTIMIZE_SPINE
+#if UNITY_EDITOR
 		//HuaHua
 		public Dictionary<KeyValuePair<int, String>, Attachment> Attachments
         {

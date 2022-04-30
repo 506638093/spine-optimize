@@ -130,13 +130,17 @@ public class SkeletonDataAsset : ScriptableObject {
                     var input = new MemoryStream(skeletonJSON.bytes);
                     var binary = new SkeletonBinary(attachmentLoader);
                     binary.Scale = skeletonDataScale;
-#if OPTIMIZE_SPINE
-					binary.CacheStrings = new List<string>() { null, "" };
+#if UNITY_EDITOR
+                    if (!Application.isPlaying)
+                    {
+                        binary.CacheStrings = new List<string>() { null, "" };
+						binary.CacheOffsetVertices = new List<float[]>();
+					}
 #endif
 					skeletonData = binary.ReadSkeletonData(input);
 
-#if OPTIMIZE_SPINE
-                    if (!binary.IsOptimizedMode)
+#if UNITY_EDITOR
+					if (!Application.isPlaying && !binary.IsOptimizedMode)
                     {
                         //HuaHua
                         var output = new MemoryStream();
@@ -155,25 +159,25 @@ public class SkeletonDataAsset : ScriptableObject {
                     json.Scale = skeletonDataScale;
                     skeletonData = json.ReadSkeletonData(input);
 
-#if OPTIMIZE_SPINE
-                    //HuaHua
-                    var output = new MemoryStream();
-                    var binary = new SkeletonBinary(attachmentLoader);
-                    binary.Scale = skeletonDataScale;
-                    binary.WriteSkeletonData(output, skeletonData);
-                    var path = UnityEditor.AssetDatabase.GetAssetPath(this);
-                    path = path.Replace("_SkeletonData.asset", ".skel.bytes");
-                    File.WriteAllBytes(path, output.ToArray());
+#if UNITY_EDITOR
+					if (!Application.isPlaying)
+					{
+						//HuaHua
+						var output = new MemoryStream();
+						var binary = new SkeletonBinary(attachmentLoader);
+						binary.Scale = skeletonDataScale;
+						binary.WriteSkeletonData(output, skeletonData);
+						var path = UnityEditor.AssetDatabase.GetAssetPath(this);
+						path = path.Replace("_SkeletonData.asset", ".skel.bytes");
+						File.WriteAllBytes(path, output.ToArray());
+					}
 #endif
                 }
-
             }
 
-			//stopwatch.Stop();
-			//Debug.Log(stopwatch.Elapsed);
 		} catch (Exception ex) {
 			if (!quiet)
-				Debug.LogError("Error reading skeleton JSON file for SkeletonData asset: " + name + "\n" + ex.Message + "\n" + ex.StackTrace, this);
+				Debug.LogError("Error reading skeleton file for SkeletonData asset: " + name + "\n" + ex.Message + "\n" + ex.StackTrace, this);
 			return null;
 		}
 
