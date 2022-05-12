@@ -29,14 +29,30 @@
  *****************************************************************************/
 
 using System;
+using System.Collections.Generic;
 
 namespace Spine {
 	public class AtlasAttachmentLoader : AttachmentLoader {
 		private Atlas[] atlasArray;
 
-		public AtlasAttachmentLoader (params Atlas[] atlasArray) {
+		// HuaHua. cache regions, quickly find
+		private Dictionary<string, AtlasRegion> regins = new Dictionary<string, AtlasRegion>();
+
+        public AtlasAttachmentLoader(params Atlas[] atlasArray)
+		{
 			if (atlasArray == null) throw new ArgumentNullException("atlas array cannot be null.");
 			this.atlasArray = atlasArray;
+
+			// HuaHua.
+			for (int i = 0; i < atlasArray.Length; i++)
+			{
+				var regions = atlasArray[i].regions;
+
+				for (int ir = 0, n = regions.Count; ir < n; ir++)
+                {
+					regins.Add(regions[ir].name, regions[ir]);
+				}
+			}
 		}
 
 		public RegionAttachment NewRegionAttachment (Skin skin, String name, String path) {
@@ -97,15 +113,8 @@ namespace Spine {
 		}
 
 		public AtlasRegion FindRegion(string name) {
-			AtlasRegion region;
-
-			for (int i = 0; i < atlasArray.Length; i++) {
-				region = atlasArray[i].FindRegion(name);
-				if (region != null)
-					return region;
-			}
-
-			return null;
+			regins.TryGetValue(name, out AtlasRegion region);
+			return region;
 		}
 	}
 }

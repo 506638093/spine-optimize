@@ -123,6 +123,8 @@ public class SkeletonDataAsset : ScriptableObject {
 		{
 			var skeletonName = skeletonJSON.name;
 
+			
+
             if (skeletonData == null)
             {
 				if (skeletonName.Contains(".skel"))
@@ -139,8 +141,13 @@ public class SkeletonDataAsset : ScriptableObject {
 #endif
 					skeletonData = binary.ReadSkeletonData(input);
 
+					if (skeletonData.version != "HuaHua2.0")
+                    {
+						Debug.LogError(skeletonName + " " + input.Length);
+					}
+
 #if UNITY_EDITOR
-					if (!Application.isPlaying && !binary.IsOptimizedMode)
+					if (!Application.isPlaying && skeletonData.version != "HuaHua2.0")
                     {
                         //HuaHua
                         var output = new MemoryStream();

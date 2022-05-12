@@ -35,12 +35,14 @@ namespace Spine {
 	/// <summary>Stores attachments by slot index and attachment name.</summary>
 	public class Skin {
 		internal String name;
-		private Dictionary<KeyValuePair<int, String>, Attachment> attachments =
-			new Dictionary<KeyValuePair<int, String>, Attachment>(AttachmentComparer.Instance);
+
+		// HuaHua. quickly find
+		private Dictionary<int, Dictionary<string, Attachment>> attachments =
+			new Dictionary<int, Dictionary<string, Attachment>>();
 
 #if UNITY_EDITOR
 		//HuaHua
-		public Dictionary<KeyValuePair<int, String>, Attachment> Attachments
+		internal Dictionary<int, Dictionary<string, Attachment>> Attachments
         {
             get
             {
@@ -58,18 +60,35 @@ namespace Spine {
 
 		public void AddAttachment (int slotIndex, String name, Attachment attachment) {
 			if (attachment == null) throw new ArgumentNullException("attachment cannot be null.");
-			attachments[new KeyValuePair<int, String>(slotIndex, name)] = attachment;
+
+			if (!attachments.TryGetValue(slotIndex, out Dictionary<string, Attachment> ats))
+            {
+				ats = new Dictionary<string, Attachment>();
+				attachments.Add(slotIndex, ats);
+			}
+			ats[name] = attachment;
 		}
 
 		/// <returns>May be null.</returns>
 		public Attachment GetAttachment (int slotIndex, String name) {
-			Attachment attachment;
-			attachments.TryGetValue(new KeyValuePair<int, String>(slotIndex, name), out attachment);
-			return attachment;
+            if (!attachments.TryGetValue(slotIndex, out Dictionary<string, Attachment> ats))
+            {
+				return null;
+            }
+
+			ats.TryGetValue(name, out Attachment attachment);
+            return attachment;
 		}
 
 		public void RemoveAttachment(int slotIndex, string name) {
-			attachments.Remove(new KeyValuePair<int, string>(slotIndex, name));
+            if (attachments.TryGetValue(slotIndex, out Dictionary<string, Attachment> ats))
+            {
+				ats.Remove(name);
+				if (ats.Count == 0)
+                {
+					attachments.Remove(slotIndex);
+				}
+			}
         }
 
 		public void RemoveAttachmentsForSlot(int slotIndex)
@@ -84,47 +103,52 @@ namespace Spine {
 
 		public void FindNamesForSlot (int slotIndex, List<String> names) {
 			if (names == null) throw new ArgumentNullException("names cannot be null.");
-			foreach (KeyValuePair<int, String> key in attachments.Keys)
-				if (key.Key == slotIndex) names.Add(key.Value);
+			if (attachments.TryGetValue(slotIndex, out Dictionary<string, Attachment> ats))
+			{
+				foreach(var each in ats)
+                {
+					names.Add(each.Key);
+				}
+			}
 		}
 
 		public void FindAttachmentsForSlot (int slotIndex, List<Attachment> attachments) {
 			if (attachments == null) throw new ArgumentNullException("attachments cannot be null.");
-			foreach (KeyValuePair<KeyValuePair<int, String>, Attachment> entry in this.attachments)
-				if (entry.Key.Key == slotIndex) attachments.Add(entry.Value);
+            if (this.attachments.TryGetValue(slotIndex, out Dictionary<string, Attachment> ats))
+            {
+                foreach (var each in ats)
+                {
+					attachments.Add(each.Value);
+                }
+            }
 		}
 
 		override public String ToString () {
 			return name;
 		}
 
-		/// <summary>Attach all attachments from this skin if the corresponding attachment from the old skin is currently attached.</summary>
-		internal void AttachAll (Skeleton skeleton, Skin oldSkin) {
-			foreach (KeyValuePair<KeyValuePair<int, String>, Attachment> entry in oldSkin.attachments) {
-				int slotIndex = entry.Key.Key;
-				Slot slot = skeleton.slots[slotIndex];
-				if (slot.attachment == entry.Value) {
-					Attachment attachment = GetAttachment(slotIndex, entry.Key.Value);
-					if (attachment != null) slot.Attachment = attachment;
-				}
-			}
-		}
-
 		///<summary>Adds all attachments from the specified skin to this skin.</summary>
 		public void CopySkin(Skin skin)
 		{
-			foreach (KeyValuePair<KeyValuePair<int, String>, Attachment> entry in skin.attachments)
+			foreach (var entry in skin.attachments)
 			{
-				int slotIndex = entry.Key.Key;
-				AddAttachment(slotIndex, entry.Key.Value, entry.Value);
+				int slotIndex = entry.Key;
+				foreach(var each in entry.Value)
+                {
+					AddAttachment(slotIndex, each.Key, each.Value);
+				}
 			}
 		}
 
 		public void DetachSkin(Skin skin)
         {
-			foreach (KeyValuePair<KeyValuePair<int, String>, Attachment> entry in skin.attachments)
+			foreach (var entry in skin.attachments)
 			{
-				RemoveAttachment(entry.Key.Key, entry.Key.Value);
+                int slotIndex = entry.Key;
+				foreach (var each in entry.Value)
+				{
+					RemoveAttachment(slotIndex, each.Key);
+				}
 			}
 		}
 

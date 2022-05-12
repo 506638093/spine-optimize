@@ -37,11 +37,40 @@ namespace Spine {
 		internal float duration;
 		internal String name;
 
-		public String Name { get { return name; } }
-		public List<Timeline> Timelines { get { return timelines; } set { timelines = value; } }
-		public float Duration { get { return duration; } set { duration = value; } }
+		/// <summary>
+		/// HuaHua. 
+		/// </summary>
+		internal SkeletonBinary binary;
+		internal int position;
+		internal SkeletonData data;
 
-		public Animation (String name, List<Timeline> timelines, float duration) {
+		public String Name { get { return name; } }
+        public List<Timeline> Timelines 
+		{ 
+			get 
+			{
+				ReadAnimation();
+				return timelines; 
+			} 
+			set 
+			{ 
+				timelines = value; 
+			} 
+		}
+        public float Duration 
+		{ 
+			get 
+			{
+				ReadAnimation();
+				return duration;
+			} 
+			set 
+			{ 
+				duration = value; 
+			} 
+		}
+
+        public Animation (String name, List<Timeline> timelines, float duration) {
 			if (name == null) throw new ArgumentNullException("name cannot be null.");
 			if (timelines == null) throw new ArgumentNullException("timelines cannot be null.");
 			this.name = name;
@@ -49,11 +78,32 @@ namespace Spine {
 			this.duration = duration;
 		}
 
+		public Animation(String name)
+        {
+			if (name == null) throw new ArgumentNullException("name cannot be null.");
+			this.name = name;
+		}
+
+		internal void ReadAnimation()
+        {
+			if (binary == null)
+            {
+				return;
+            }
+
+			binary.ReadAnimation(this, binary.SkeletonBinBuffer, ref position, data);
+
+			binary = null;
+			data = null;
+		}
+
 		/// <summary>Poses the skeleton at the specified time for this animation.</summary>
 		/// <param name="lastTime">The last time the animation was applied.</param>
 		/// <param name="events">Any triggered events are added.</param>
 		public void Apply (Skeleton skeleton, float lastTime, float time, bool loop, List<Event> events) {
 			if (skeleton == null) throw new ArgumentNullException("skeleton cannot be null.");
+
+			ReadAnimation();
 
 			if (loop && duration != 0) {
 				time %= duration;
@@ -71,6 +121,8 @@ namespace Spine {
 		/// <param name="alpha">The amount of this animation that affects the current pose.</param>
 		public void Mix (Skeleton skeleton, float lastTime, float time, bool loop, List<Event> events, float alpha) {
 			if (skeleton == null) throw new ArgumentNullException("skeleton cannot be null.");
+
+			ReadAnimation();
 
 			if (loop && duration != 0) {
 				time %= duration;
@@ -182,14 +234,14 @@ namespace Spine {
 		public void SetCurve (int frameIndex, float cx1, float cy1, float cx2, float cy2) {
 
 #if UNITY_EDITOR
-			//HuaHua
-			BezierCurves[frameIndex * 4] = cx1;
-			BezierCurves[frameIndex * 4 + 1] = cy1;
-			BezierCurves[frameIndex * 4 + 2] = cx2;
-			BezierCurves[frameIndex * 4 + 3] = cy2;
+            //HuaHua
+            BezierCurves[frameIndex * 4] = cx1;
+            BezierCurves[frameIndex * 4 + 1] = cy1;
+            BezierCurves[frameIndex * 4 + 2] = cx2;
+            BezierCurves[frameIndex * 4 + 3] = cy2;
 #endif
 
-			float subdiv1 = 1f / BEZIER_SEGMENTS, subdiv2 = subdiv1 * subdiv1, subdiv3 = subdiv2 * subdiv1;
+            float subdiv1 = 1f / BEZIER_SEGMENTS, subdiv2 = subdiv1 * subdiv1, subdiv3 = subdiv2 * subdiv1;
 			float pre1 = 3 * subdiv1, pre2 = 3 * subdiv2, pre4 = 6 * subdiv2, pre5 = 6 * subdiv3;
 			float tmp1x = -cx1 * 2 + cx2, tmp1y = -cy1 * 2 + cy2, tmp2x = (cx1 - cx2) * 3 + 1, tmp2y = (cy1 - cy2) * 3 + 1;
 			float dfx = cx1 * pre1 + tmp1x * pre2 + tmp2x * subdiv3, dfy = cy1 * pre1 + tmp1y * pre2 + tmp2y * subdiv3;

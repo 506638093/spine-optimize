@@ -41,7 +41,7 @@ using Windows.Storage;
 namespace Spine {
 	public class Atlas {
 		List<AtlasPage> pages = new List<AtlasPage>();
-		List<AtlasRegion> regions = new List<AtlasRegion>();
+		internal List<AtlasRegion> regions = new List<AtlasRegion>();
 		TextureLoader textureLoader;
 
 #if WINDOWS_STOREAPP
@@ -89,6 +89,18 @@ namespace Spine {
 			this.textureLoader = null;
 		}
 
+		private bool IsEmpty(string line)
+		{
+			foreach (var ch in line)
+			{
+				if (!char.IsWhiteSpace(ch))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
 		private void Load (TextReader reader, String imagesDir, TextureLoader textureLoader) {
 			if (textureLoader == null) throw new ArgumentNullException("textureLoader cannot be null.");
 			this.textureLoader = textureLoader;
@@ -98,7 +110,7 @@ namespace Spine {
 			while (true) {
 				String line = reader.ReadLine();
 				if (line == null) break;
-				if (line.Trim().Length == 0)
+				if (line.Length == 0 || IsEmpty(line))
 					page = null;
 				else if (page == null) {
 					page = new AtlasPage();
@@ -220,7 +232,8 @@ namespace Spine {
 		/// <returns>The region, or null.</returns>
 		public AtlasRegion FindRegion (String name) {
 			for (int i = 0, n = regions.Count; i < n; i++)
-				if (regions[i].name == name) return regions[i];
+				if (regions[i].name == name) 
+					return regions[i];
 			return null;
 		}
 

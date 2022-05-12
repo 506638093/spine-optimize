@@ -96,9 +96,11 @@ namespace Spine {
 
 #if OPTIMIZE_SPINE_READ
 
-        public List<string> CacheStrings;
-        public List<float[]> CacheOffsetVertices;
-        public bool IsOptimizedMode = false;
+        internal List<string> CacheStrings;
+        internal List<float[]> CacheOffsetVertices;
+        internal bool IsOptimizedMode = false;
+        internal byte[] SkeletonBinBuffer;
+
 
         private int FindOffsetVerticeIndex(float[] offsetVertices)
         {
@@ -127,6 +129,7 @@ namespace Spine {
             return -1;
         }
 
+
         public SkeletonData ReadSkeletonData(Stream input)
         {
             if (input == null)
@@ -134,7 +137,8 @@ namespace Spine {
                 throw new ArgumentNullException("input cannot be null.");
             }
 
-            var binBuffer = new byte[input.Length];
+            SkeletonBinBuffer = new byte[input.Length];
+            var binBuffer = SkeletonBinBuffer;
             input.Read(binBuffer, 0, (int)input.Length);
             int binPosition = 0;
 
@@ -154,7 +158,7 @@ namespace Spine {
                 ReadString(binBuffer, ref binPosition);
             }
 
-            if (skeletonData.version == "HuaHua1.0")
+            if (skeletonData.version.Contains("HuaHua"))
             {
                 IsOptimizedMode = true;
             }
@@ -523,7 +527,8 @@ namespace Spine {
             return array;
         }
 
-        private void ReadAnimation(String name, byte[] binBuffer, ref int binPosition, SkeletonData skeletonData)
+
+        internal unsafe void ReadAnimation(Animation anim, byte[] binBuffer, ref int binPosition, SkeletonData skeletonData)
         {
             var timelines = new List<Timeline>();
             float scale = Scale;
@@ -591,7 +596,26 @@ namespace Spine {
                                 timeline.boneIndex = boneIndex;
                                 for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
                                 {
-                                    timeline.SetFrame(frameIndex, ReadFloat(binBuffer, ref binPosition), ReadFloat(binBuffer, ref binPosition));
+                                    float time, angle;
+                                    buffer[3] = binBuffer[binPosition++];
+                                    buffer[2] = binBuffer[binPosition++];
+                                    buffer[1] = binBuffer[binPosition++];
+                                    buffer[0] = binBuffer[binPosition++];
+                                    fixed (byte* ptr = &buffer[0])
+                                    {
+                                        time = *(float*)ptr;
+                                    }
+
+                                    buffer[3] = binBuffer[binPosition++];
+                                    buffer[2] = binBuffer[binPosition++];
+                                    buffer[1] = binBuffer[binPosition++];
+                                    buffer[0] = binBuffer[binPosition++];
+                                    fixed (byte* ptr = &buffer[0])
+                                    {
+                                        angle = *(float*)ptr;
+                                    }
+
+                                    timeline.SetFrame(frameIndex, time, angle);
                                     if (frameIndex < frameCount - 1)
                                     {
                                         ReadCurve(binBuffer, ref binPosition, frameIndex, timeline);
@@ -618,8 +642,35 @@ namespace Spine {
                                 timeline.boneIndex = boneIndex;
                                 for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
                                 {
-                                    timeline.SetFrame(frameIndex, ReadFloat(binBuffer, ref binPosition), ReadFloat(binBuffer, ref binPosition) * timelineScale, ReadFloat(binBuffer, ref binPosition)
-                                        * timelineScale);
+                                    float time, x, y;
+                                    buffer[3] = binBuffer[binPosition++];
+                                    buffer[2] = binBuffer[binPosition++];
+                                    buffer[1] = binBuffer[binPosition++];
+                                    buffer[0] = binBuffer[binPosition++];
+                                    fixed (byte* ptr = &buffer[0])
+                                    {
+                                        time = *(float*)ptr;
+                                    }
+
+                                    buffer[3] = binBuffer[binPosition++];
+                                    buffer[2] = binBuffer[binPosition++];
+                                    buffer[1] = binBuffer[binPosition++];
+                                    buffer[0] = binBuffer[binPosition++];
+                                    fixed (byte* ptr = &buffer[0])
+                                    {
+                                        x = *(float*)ptr * timelineScale;
+                                    }
+
+                                    buffer[3] = binBuffer[binPosition++];
+                                    buffer[2] = binBuffer[binPosition++];
+                                    buffer[1] = binBuffer[binPosition++];
+                                    buffer[0] = binBuffer[binPosition++];
+                                    fixed (byte* ptr = &buffer[0])
+                                    {
+                                        y = *(float*)ptr * timelineScale;
+                                    }
+
+                                    timeline.SetFrame(frameIndex, time, x, y);
                                     if (frameIndex < frameCount - 1)
                                     {
                                         ReadCurve(binBuffer, ref binPosition, frameIndex, timeline);
@@ -839,10 +890,36 @@ namespace Spine {
             }
 
             timelines.TrimExcess();
-            skeletonData.animations.Add(new Animation(name, timelines, duration));
+
+            //
+            anim.timelines = timelines;
+            anim.duration = duration;
         }
 
-        private void ReadCurve(byte[] binBuffer, ref int binPosition, int frameIndex, CurveTimeline timeline)
+        private unsafe void ReadAnimation(String name, byte[] binBuffer, ref int binPosition, SkeletonData skeletonData)
+        {
+            var anim = new Animation(name);
+
+            if (skeletonData.version == "HuaHua2.0")
+            {
+                var animLength = ReadInt(binBuffer, ref binPosition);
+
+                anim.binary = this;
+                anim.position = binPosition;
+                anim.data = skeletonData;
+
+                skeletonData.animations.Add(anim);
+
+                binPosition += animLength;
+
+                return;
+            }
+            
+            ReadAnimation(anim, binBuffer, ref binPosition, skeletonData);
+            skeletonData.animations.Add(anim);
+        }
+
+        private unsafe void ReadCurve(byte[] binBuffer, ref int binPosition, int frameIndex, CurveTimeline timeline)
         {
             switch (binBuffer[binPosition++])
             {
@@ -850,7 +927,47 @@ namespace Spine {
                     timeline.SetStepped(frameIndex);
                     break;
                 case CURVE_BEZIER:
-                    timeline.SetCurve(frameIndex, ReadFloat(binBuffer, ref binPosition), ReadFloat(binBuffer, ref binPosition), ReadFloat(binBuffer, ref binPosition), ReadFloat(binBuffer, ref binPosition));
+                    {
+                        float cx1, cy1, cx2, cy2;
+
+                        buffer[3] = binBuffer[binPosition++];
+                        buffer[2] = binBuffer[binPosition++];
+                        buffer[1] = binBuffer[binPosition++];
+                        buffer[0] = binBuffer[binPosition++];
+                        fixed (byte* ptr = &buffer[0])
+                        {
+                            cx1 = * (float*)ptr;
+                        }
+
+                        buffer[3] = binBuffer[binPosition++];
+                        buffer[2] = binBuffer[binPosition++];
+                        buffer[1] = binBuffer[binPosition++];
+                        buffer[0] = binBuffer[binPosition++];
+                        fixed (byte* ptr = &buffer[0])
+                        {
+                            cy1 = *(float*)ptr;
+                        }
+
+                        buffer[3] = binBuffer[binPosition++];
+                        buffer[2] = binBuffer[binPosition++];
+                        buffer[1] = binBuffer[binPosition++];
+                        buffer[0] = binBuffer[binPosition++];
+                        fixed (byte* ptr = &buffer[0])
+                        {
+                            cx2 = *(float*)ptr;
+                        }
+
+                        buffer[3] = binBuffer[binPosition++];
+                        buffer[2] = binBuffer[binPosition++];
+                        buffer[1] = binBuffer[binPosition++];
+                        buffer[0] = binBuffer[binPosition++];
+                        fixed (byte* ptr = &buffer[0])
+                        {
+                            cy2 = *(float*)ptr;
+                        }
+
+                        timeline.SetCurve(frameIndex, cx1, cy1, cx2, cy2);
+                    }
                     break;
             }
         }
@@ -1969,24 +2086,7 @@ namespace Spine {
 				else if (tl is FFDTimeline)
 				{
 					var timeline = tl as FFDTimeline;
-					int skinIdx = -1;
-
-					for (int i = 0; i < skeletonData.skins.Count; ++i)
-					{
-						var skin = skeletonData.skins[i];
-						foreach (var each in skin.Attachments)
-						{
-							if (timeline.attachment == each.Value)
-							{
-								skinIdx = i;
-								break;
-							}
-						}
-						if (skinIdx != -1)
-						{
-							break;
-						}
-					}
+					int skinIdx = skeletonData.GetSkinIndex(timeline.attachment);
 
 					if (!ffdTimelines.TryGetValue(skinIdx, out Dictionary<int, List<FFDTimeline>> skinList))
                     {
@@ -2012,8 +2112,15 @@ namespace Spine {
 				}
             }
 
-			// Slot timelines.
-			WriteInt(output, slotTimelines.Count, true);
+            // Animation's Length
+            var startPos = output.Position;
+            if (IsOptimizedMode)
+            {
+                WriteInt(output, 0);    //placeholder
+            }
+
+            // Slot timelines.
+            WriteInt(output, slotTimelines.Count, true);
             foreach (var each in slotTimelines)
             {
 				int slotIndex = each.Key;
@@ -2427,23 +2534,7 @@ namespace Spine {
 					for (int iii = 0; iii < each2.Value.Count; ++iii)
                     {
 						var timeline = each2.Value[iii];
-						string attachmentName = null;
-						for (int si = 0; si < skeletonData.skins.Count; ++si)
-                        {
-                            var skin = skeletonData.skins[si];
-                            foreach (var each in skin.Attachments)
-                            {
-                                if (timeline.attachment == each.Value)
-                                {
-									attachmentName = each.Key.Value;
-									break;
-                                }
-                            }
-                            if (!string.IsNullOrEmpty(attachmentName))
-                            {
-                                break;
-                            }
-                        }
+						string attachmentName = skeletonData.GetAttachName(timeline.attachment);
 						WriteString(output, attachmentName);
 
 						var frames = timeline.Frames;
@@ -2587,6 +2678,15 @@ namespace Spine {
                     }
 				}
             }
+
+            // write animation's real length
+            var endPos = output.Position;
+            if (IsOptimizedMode)
+            {
+                output.Position = startPos;
+                WriteInt(output, (int)(endPos - startPos - 4));
+                output.Position = endPos;
+            }
         }
 
         public void WriteSkeletonData(Stream output, SkeletonData skeletonData)
@@ -2597,7 +2697,7 @@ namespace Spine {
 
             // Skeleton.
             WriteString(output, skeletonData.hash, false);
-			WriteString(output, IsOptimizedMode ? "HuaHua1.0" : skeletonData.version, false);
+			WriteString(output, IsOptimizedMode ? "HuaHua2.0" : skeletonData.version, false);
 			WriteFloat(output, skeletonData.width);
 			WriteFloat(output, skeletonData.height);
 			WriteBoolean(output, false);
@@ -2715,13 +2815,16 @@ namespace Spine {
 			var slots = new Dictionary<int, List<KeyValuePair<String, Attachment>>>();
 			foreach (var each in attachments)
             {
-				if (!slots.TryGetValue(each.Key.Key, out List<KeyValuePair<String, Attachment>> ret))
+				if (!slots.TryGetValue(each.Key, out List<KeyValuePair<String, Attachment>> ret))
                 {
 					ret = new List<KeyValuePair<String, Attachment>>();
-					slots.Add(each.Key.Key, ret);
+					slots.Add(each.Key, ret);
 				}
 
-				ret.Add( new KeyValuePair<string, Attachment>(each.Key.Value, each.Value) );
+                foreach(var entry in each.Value)
+                {
+                    ret.Add(new KeyValuePair<string, Attachment>(entry.Key, entry.Value));
+                }
             }
 
 

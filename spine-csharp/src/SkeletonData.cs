@@ -156,6 +156,45 @@ namespace Spine {
 			return null;
 		}
 
+		public string GetAttachName(Attachment attachment)
+        {
+            for (int si = 0; si < skins.Count; ++si)
+            {
+                var skin = skins[si];
+                foreach (var entry in skin.Attachments)
+                {
+                    foreach (var each in entry.Value)
+                    {
+                        if (attachment == each.Value)
+                        {
+                            return each.Key;
+                        }
+                    }
+                }
+            }
+			return null;
+        }
+
+		public int GetSkinIndex(Attachment attachment)
+        {
+            for (int si = 0; si < skins.Count; ++si)
+            {
+                var skin = skins[si];
+                foreach (var entry in skin.Attachments)
+                {
+                    foreach (var each in entry.Value)
+                    {
+                        if (attachment == each.Value)
+                        {
+							return si;
+                        }
+                    }
+                }
+            }
+
+			return -1;
+        }
+
 		// ---
 
 		override public String ToString () {
