@@ -132,6 +132,7 @@ public class SkeletonDataAsset : ScriptableObject {
                     var input = new MemoryStream(skeletonJSON.bytes);
                     var binary = new SkeletonBinary(attachmentLoader);
                     binary.Scale = skeletonDataScale;
+
 #if UNITY_EDITOR
                     if (!Application.isPlaying)
                     {
@@ -139,14 +140,16 @@ public class SkeletonDataAsset : ScriptableObject {
 						binary.CacheOffsetVertices = new List<float[]>();
 					}
 #endif
+
 					skeletonData = binary.ReadSkeletonData(input);
 
-					if (skeletonData.version != "HuaHua2.0")
-                    {
-						Debug.LogError(skeletonName + " " + input.Length);
-					}
 
 #if UNITY_EDITOR
+					if (skeletonData.version != "HuaHua2.0")
+                    {
+						Debug.LogError($"Exist unconverted spine:{skeletonName} size:{input.Length}");
+					}
+
 					if (!Application.isPlaying && skeletonData.version != "HuaHua2.0")
                     {
                         //HuaHua
